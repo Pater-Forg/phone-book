@@ -4,16 +4,18 @@
 
 int main() {
     PhoneBook book("data.csv", "conf.txt");
-    for (int i = 0; i < 10; i++) {
-        Entry entry = {
-            0,
-            "First",
-            "Middle",
-            "Last",
-            "8-800-555-3535",
-            "Lorem ipsum dolores sit amet"
-        };
-        book.Add(entry);
-    }
+    book.Remove(2);
+    Entry entry = {
+        0,
+        "Dara",
+        "",
+        "Moskalenko",
+        "1-111-111-11-11",
+        ""
+    };
+    book.Add(entry);
+    Entry dara = book.Find("Dara");
+    std::cout << dara.FirstName << std::endl;
+    book.SaveData();
     return 0;
 }
