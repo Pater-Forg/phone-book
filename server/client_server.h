@@ -4,18 +4,9 @@
 #include <netinet/in.h>
 #include <unistd.h>
 #include <memory>
-
-class Client
-{
-    int _socket;
-    sockaddr_in _address;
-public:
-    Client(int socket, sockaddr_in address);
-    ~Client();
-    int GetSocket();
-    sockaddr_in GetAddress();
-    void Disconnect();
-};
+#include <errno.h>
+#include <string>
+#include "phone_book.h"
 
 class Server
 {
@@ -23,14 +14,19 @@ class Server
     sockaddr_in _address;
     int _port;
     int _connections;
-    std::unique_ptr<Client> _client;
     bool _is_running = false;
+    int* _sockets_array = nullptr;
+    PhoneBook _phone_book;
 
-    void _handle_client(std::unique_ptr<Client>& client);
-    void _handle_acceptions();
+    void _HandleAcceptions();
+    void _FdSetRead(fd_set* read_fd_set);
+    void _SetSocket(int new_socket);
+    void _TryAcceptConnection();
+    void _TryRecvFrom(int &socket);
+    void _ProceedQuery(int socket, std::string query);
 public:
     Server(int port, int connections);
-    ~Server();
     void Start();
     void Stop();
+    ~Server();
 };

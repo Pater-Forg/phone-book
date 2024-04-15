@@ -21,9 +21,9 @@ class PhoneBook {
     std::list<Entry> _datalist;
     int _id;
     char _delimiter = ';';
-    void _init_id();
-    void _update_id();
-    void _load_data();
+    void _InitId();
+    void _UpdateId();
+    void _LoadData();
 public:
     PhoneBook(std::string datapath, std::string confpath);
     bool Add(Entry entry);

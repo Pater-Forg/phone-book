@@ -1,81 +1,132 @@
 #include "client_server.h"
-
-Client::Client(int socket, sockaddr_in address)
-    : _socket(socket), _address(address) {}
-
-Client::~Client() {
-    close(_socket);
-    std::cout << "[Info] client disconnected (destructor)" << std::endl;
-}
-
-int Client::GetSocket() {
-    return _socket;
-}
-
-sockaddr_in Client::GetAddress() {
-    return _address;
-}
-
-void Client::Disconnect() {
-    close(_socket);
-    std::cout << "[Info] client disconnected (disconnect)" << std::endl;
-}
+#include <thread>
+#include <chrono>
 
 Server::Server(int port, int connections)
-    : _port(port), _connections(connections) {}
+    : _port(port), _connections(connections), _phone_book("data.csv", "conf") {
+        _sockets_array = new int[connections];
+        for (int i = 0; i < _connections; i++) {
+            _sockets_array[i] = -1;
+        }   
+    }
 
 Server::~Server() {
-    close(_socket);
-    _client->Disconnect();
-}
-
-void Server::_handle_acceptions() {
-    socklen_t addrlen = sizeof(sockaddr_in);
-    while (_is_running){
-        sockaddr_in client_address;
-        int client_socket = accept(_socket, (struct sockaddr*)&client_address, &addrlen);
-        if (client_socket == -1) {
-            std::cout << "[Error] can't accept client" << std::endl;
-            continue;
-        }
-        std::unique_ptr<Client> client(new Client(client_socket, client_address));
-        std::cout << "[Info] client socket: " << client->GetSocket() << std::endl;
-        _client = std::move(client);
-        _handle_client(_client);
-    }
-}
-
-void Server::_handle_client(std::unique_ptr<Client>& client) {
-    char buffer[1024] = {0};
-    while (client) {
-        int result = read(client->GetSocket(), buffer, sizeof(buffer));
-        if (result == 0) break;
-        std::cout << "[Recv] " << buffer << std::endl;
-    }
-    client->Disconnect();
+    delete[] _sockets_array;
 }
 
 void Server::Start() {
     _socket = socket(AF_INET, SOCK_STREAM, 0);
+    if (_socket < 0) {
+        std::cout << "[Error] Can't get server socket" << std::endl;
+        return;
+    }
 
     _address.sin_family = AF_INET;
     _address.sin_port = htons(_port);
     _address.sin_addr.s_addr = INADDR_ANY;
 
-    bind(_socket, (struct sockaddr *)&_address, sizeof(_address));
+    bind(_socket, (struct sockaddr*)&_address, sizeof(_address));
     if (listen(_socket, _connections) == 0) {
         _is_running = true;
         std::cout << "[Info] Server is listening on port " << _port << "..." << std::endl;
-        _handle_acceptions();
+        _sockets_array[0] = _socket;
+        _HandleAcceptions();
     }
     else {
         std::cout << "[Error] Can't start listening" << std::endl;
     }    
 }
 
+void Server::_HandleAcceptions() {
+    fd_set read_fd_set;
+    int incoming_connections;
+    while (_is_running) {
+        FD_ZERO(&read_fd_set);
+        _FdSetRead(&read_fd_set);
+
+        incoming_connections = select(FD_SETSIZE, &read_fd_set, NULL, NULL, NULL);
+        if (incoming_connections >= 0) {
+            if (FD_ISSET(_socket, &read_fd_set)) {
+                _TryAcceptConnection();
+                incoming_connections--;
+                if (!incoming_connections) continue;
+            }
+
+            for (int i = 1; i < _connections; i++) {
+                if (_sockets_array[i] > 0 && FD_ISSET(_sockets_array[i], &read_fd_set)) {
+                    _TryRecvFrom(_sockets_array[i]);
+                }
+            }
+        }
+    }
+}
+
+void Server::_FdSetRead(fd_set* read_fd_set) {
+    for (int i = 0; i < _connections; i++) {
+        if (_sockets_array[i] >= 0) {
+            FD_SET(_sockets_array[i], read_fd_set);
+        }
+    }
+}
+
+void Server::_TryAcceptConnection() {
+    sockaddr_in new_address;
+    socklen_t addrlen = sizeof(sockaddr_in);
+    int new_socket = accept(_socket, (struct sockaddr*)&new_address, &addrlen);
+    if (new_socket >= 0) {
+        std::cout << "[Info] accepted connection with sd: " << new_socket << std::endl;
+        _SetSocket(new_socket);
+    }
+    else {
+        std::cout << "[Error] acception failed: " << strerror(errno) << std::endl;
+    }
+}
+
+void Server::_TryRecvFrom(int &socket) {
+    char buffer[1024] = {0};
+    int recv_res = recv(socket, buffer, 1024, 0);
+    if (recv_res > 0) {
+        std::cout << "[Recv:" << socket << "] " << buffer << std::endl;
+        std::string query(buffer);
+        std::thread([this, socket, &query](){
+            this->_ProceedQuery(socket, query);
+        }).detach();
+    }
+    else if (recv_res == 0) {
+        std::cout << "[Info] Close connection for: " << socket << std::endl;
+        close(socket);
+        socket = -1;
+    }
+    else if (recv_res < 0) {
+        std::cout << "[Error] Failed to recive message from: " << socket << std::endl;
+    }
+}
+
+void Server::_SetSocket(int new_socket) {
+    for (int i = 0; i < _connections; i++) {
+        if (_sockets_array[i] < 0) {
+            _sockets_array[i] = new_socket;
+            break;
+        }
+    }
+}
+
 void Server::Stop() {
     _is_running = false;
-    close(_socket);
-    _client->Disconnect();
+    for (int i = 0; i < _connections; i++) {
+        close(_sockets_array[i]);
+    }
     std::cout << "[Info] Server stopped" << std::endl;
+}
+
+void Server::_ProceedQuery(int socket, std::string query) {
+    using namespace std::chrono_literals;
+    if (query == "sleep long") {
+        std::this_thread::sleep_for(20s);
+    }
+    else if (query == "sleep short") {
+        std::this_thread::sleep_for(1s);
+    }
+    std::string response = "response";
+    send(socket, response.c_str(), response.length()+1, 0);
 }

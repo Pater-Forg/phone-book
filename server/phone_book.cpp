@@ -6,11 +6,11 @@
 PhoneBook::PhoneBook(std::string datapath, std::string confpath) {
     _datapath = datapath;
     _confpath = confpath;
-    _init_id();
-    _load_data();
+    _InitId();
+    _LoadData();
 }
 
-void PhoneBook::_load_data() {
+void PhoneBook::_LoadData() {
     _datafile.open(_datapath);
     if (!_datafile.good()) {
         _datafile.close();
@@ -51,7 +51,7 @@ void PhoneBook::SaveData() {
     _datafile.close();
 }
 
-void PhoneBook::_init_id() {
+void PhoneBook::_InitId() {
     _conffile.open(_confpath);
     if (_conffile.good()) {
         _conffile >> _id;
@@ -65,7 +65,7 @@ void PhoneBook::_init_id() {
     _conffile.close();
 }
 
-void PhoneBook::_update_id() {
+void PhoneBook::_UpdateId() {
     _conffile.open(_confpath, std::ios::out);
     _id += 1;
     _conffile << _id;
@@ -77,21 +77,26 @@ std::list<Entry>& PhoneBook::GetAll() {
 }
 
 bool PhoneBook::Add(Entry entry) {
-    _update_id();
+    _mutex.lock();
+    _UpdateId();
     entry.Id = _id;
     _datalist.push_back(entry);
+    _mutex.unlock();
     return true;
 }
 
 bool PhoneBook::Remove(int id) {
+    _mutex.lock();
     auto it = std::find_if(
         _datalist.begin(),
         _datalist.end(),
         [id](Entry entry){ return entry.Id == id; });
     if (it == _datalist.end()) {
+        _mutex.unlock();
         return false;
     }
     _datalist.erase(it);
+    _mutex.unlock();
     return true;
 }
 
