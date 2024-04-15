@@ -10,6 +10,8 @@ struct Entry {
     std::string LastName;
     std::string PhoneNumber;
     std::string Note;
+
+    std::string ToString(char delim);
 };
 
 class PhoneBook {
@@ -31,5 +33,6 @@ public:
     Entry Get(int id);
     Entry Find(std::string value);
     std::list<Entry>& GetAll();
+    char GetDelim();
     void SaveData();
 };

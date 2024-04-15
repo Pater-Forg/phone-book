@@ -1,6 +1,7 @@
 #include "client_server.h"
 #include <thread>
 #include <chrono>
+#include <sstream>
 
 Server::Server(int port, int connections)
     : _port(port), _connections(connections), _phone_book("data.csv", "conf") {
@@ -88,7 +89,7 @@ void Server::_TryRecvFrom(int &socket) {
     if (recv_res > 0) {
         std::cout << "[Recv:" << socket << "] " << buffer << std::endl;
         std::string query(buffer);
-        std::thread([this, socket, &query](){
+        std::thread([this, socket, query](){
             this->_ProceedQuery(socket, query);
         }).detach();
     }
@@ -120,13 +121,43 @@ void Server::Stop() {
 }
 
 void Server::_ProceedQuery(int socket, std::string query) {
-    using namespace std::chrono_literals;
-    if (query == "sleep long") {
-        std::this_thread::sleep_for(20s);
+    std::stringstream s_stream(query.c_str());
+    std::string command;
+    std::string response;
+    char delim = _phone_book.GetDelim();
+    std::getline(s_stream, command, ' ');
+    std::cout << "[Cmd] '" << command << "'" << std::endl;
+    if (command == "add") {
+        Entry new_entry;
+        std::getline(s_stream, new_entry.FirstName, delim);
+        std::getline(s_stream, new_entry.MiddleName, delim);
+        std::getline(s_stream, new_entry.LastName, delim);
+        std::getline(s_stream, new_entry.PhoneNumber, delim);
+        std::getline(s_stream, new_entry.Note, delim);
+        _phone_book.Add(new_entry);
+        response = "Success operation: Add";
     }
-    else if (query == "sleep short") {
-        std::this_thread::sleep_for(1s);
+    else if (command == "delete") {
+        int id;
+        s_stream >> id;
+        if (_phone_book.Remove(id)) {
+            response = "Success operation: Delete";
+        }
+        else {
+            response = "Failed operation: Delete (id not found)";
+        }
     }
-    std::string response = "response";
+    else if (command == "find") {
+        std::string value;
+        s_stream >> value;
+        Entry entry = _phone_book.Find(value);
+        if (entry.Id > 0) {
+            response = entry.ToString(delim);
+        }
+        else {
+            response = "Not found";
+        }
+    }
+    _phone_book.SaveData();
     send(socket, response.c_str(), response.length()+1, 0);
 }

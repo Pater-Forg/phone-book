@@ -3,11 +3,24 @@
 #include <sstream>
 #include <algorithm>
 
+std::string Entry::ToString(char delim) {
+    return std::to_string(Id) + delim +
+           FirstName + delim +
+           MiddleName + delim +
+           LastName + delim +
+           PhoneNumber + delim +
+           Note + delim;
+}
+
 PhoneBook::PhoneBook(std::string datapath, std::string confpath) {
     _datapath = datapath;
     _confpath = confpath;
     _InitId();
     _LoadData();
+}
+
+char PhoneBook::GetDelim() {
+    return _delimiter;
 }
 
 void PhoneBook::_LoadData() {
