@@ -9,7 +9,7 @@ int main() {
         while (1) {
             std::string input;
             std::cin >> input;
-            if (input == "close") {
+            if (input == "stop") {
                 server.Stop();
                 exit(0);
             }

@@ -30,6 +30,7 @@ void Server::Start() {
     if (listen(_socket, _connections) == 0) {
         _is_running = true;
         std::cout << "[Info] Server is listening on port " << _port << "..." << std::endl;
+        std::cout << "[Info] Enter 'stop' to stop server" << std::endl;
         _sockets_array[0] = _socket;
         _HandleAcceptions();
     }
@@ -47,12 +48,15 @@ void Server::_HandleAcceptions() {
 
         incoming_connections = select(FD_SETSIZE, &read_fd_set, NULL, NULL, NULL);
         if (incoming_connections >= 0) {
+            // check if there is event on server
             if (FD_ISSET(_socket, &read_fd_set)) {
                 _TryAcceptConnection();
                 incoming_connections--;
+                // there was only one event (from server)
                 if (!incoming_connections) continue;
             }
 
+            // check for events from clients
             for (int i = 1; i < _connections; i++) {
                 if (_sockets_array[i] > 0 && FD_ISSET(_sockets_array[i], &read_fd_set)) {
                     _TryRecvFrom(_sockets_array[i]);
@@ -84,11 +88,12 @@ void Server::_TryAcceptConnection() {
 }
 
 void Server::_TryRecvFrom(int &socket) {
-    char buffer[1024] = {0};
-    int recv_res = recv(socket, buffer, 1024, 0);
+    char buffer[BUFSIZE] = {0};
+    int recv_res = recv(socket, buffer, BUFSIZE, 0);
     if (recv_res > 0) {
         std::cout << "[Recv:" << socket << "] " << buffer << std::endl;
         std::string query(buffer);
+        // client is proceeded in separate thread for non-blocking other clients
         std::thread([this, socket, query](){
             this->_ProceedQuery(socket, query);
         }).detach();
@@ -99,7 +104,7 @@ void Server::_TryRecvFrom(int &socket) {
         socket = -1;
     }
     else if (recv_res < 0) {
-        std::cout << "[Error] Failed to recive message from: " << socket << std::endl;
+        std::cout << "[Error] Failed to receive message from: " << socket << std::endl;
     }
 }
 
@@ -125,32 +130,51 @@ void Server::_ProceedQuery(int socket, std::string query) {
     std::string command;
     std::string response;
     char delim = _phone_book.GetDelim();
+    // read command first
     std::getline(s_stream, command, ' ');
-    std::cout << "[Cmd] '" << command << "'" << std::endl;
     if (command == "add") {
+        // read data separated by 'delim' in Entry struct
         Entry new_entry;
         std::getline(s_stream, new_entry.FirstName, delim);
         std::getline(s_stream, new_entry.MiddleName, delim);
         std::getline(s_stream, new_entry.LastName, delim);
         std::getline(s_stream, new_entry.PhoneNumber, delim);
         std::getline(s_stream, new_entry.Note, delim);
+        // then add new_entry to entries list and write data to csv file
         _phone_book.Add(new_entry);
         response = "Success operation: Add";
+        _phone_book.SaveData();
     }
     else if (command == "delete") {
-        int id;
+        // remove entry by id
+        int id = 0;
         s_stream >> id;
         if (_phone_book.Remove(id)) {
             response = "Success operation: Delete";
+            _phone_book.SaveData();
         }
         else {
             response = "Failed operation: Delete (id not found)";
         }
     }
     else if (command == "find") {
+        // find entry by value and send all matches
         std::string value;
         s_stream >> value;
-        Entry entry = _phone_book.Find(value);
+        std::list<Entry> matches = _phone_book.Find(value);
+        if (matches.size() > 0) {
+            for (Entry& entry : matches) {
+                response += entry.ToString(delim) + '\n';
+            }
+        }
+        else {
+            response = "Not found";
+        }
+    }
+    else if (command == "get") {
+        int id = 0;
+        s_stream >> id;
+        Entry entry = _phone_book.Get(id);
         if (entry.Id > 0) {
             response = entry.ToString(delim);
         }
@@ -158,6 +182,20 @@ void Server::_ProceedQuery(int socket, std::string query) {
             response = "Not found";
         }
     }
-    _phone_book.SaveData();
+    else if (command == "getall") {
+        // get all entries from list
+        std::list<Entry> entries = _phone_book.GetAll();
+        if (entries.size() > 0) {
+            for (Entry& entry : entries) {
+                response += entry.ToString(delim) + '\n';
+            }
+        }
+        else {
+            response = "No entries yet";
+        }
+    }
+    else {
+        response = "Unknown command";
+    }
     send(socket, response.c_str(), response.length()+1, 0);
 }

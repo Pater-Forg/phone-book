@@ -89,13 +89,12 @@ std::list<Entry>& PhoneBook::GetAll() {
     return _datalist;
 }
 
-bool PhoneBook::Add(Entry entry) {
+void PhoneBook::Add(Entry entry) {
     _mutex.lock();
     _UpdateId();
     entry.Id = _id;
     _datalist.push_back(entry);
     _mutex.unlock();
-    return true;
 }
 
 bool PhoneBook::Remove(int id) {
@@ -125,19 +124,24 @@ Entry PhoneBook::Get(int id) {
     return *it;
 }
 
-Entry PhoneBook::Find(std::string value) {
-    auto it = std::find_if(
-        _datalist.begin(),
+// convert value to lowercase string
+std::string StrToLower(std::string& s) {
+    std::string res(s);
+    std::transform(s.begin(), s.end(), res.begin(),
+        [](unsigned char c){return std::tolower(c);});
+    return res;
+}
+
+std::list<Entry> PhoneBook::Find(std::string value) {
+    std::list<Entry> matches;
+    std::copy_if(_datalist.begin(),
         _datalist.end(),
+        std::back_inserter(matches),
         [value](Entry entry) {
-            return entry.FirstName == value ||
-                   entry.MiddleName == value ||
-                   entry.LastName == value ||
+            return StrToLower(entry.FirstName) == value ||
+                   StrToLower(entry.MiddleName) == value ||
+                   StrToLower(entry.LastName) == value ||
                    entry.PhoneNumber == value;
-            });
-    if (it == _datalist.end()) {
-        Entry empty_entry = {0}; 
-        return empty_entry;
-    }
-    return *it;
+        });
+    return matches;
 }
